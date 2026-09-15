@@ -1,0 +1,7 @@
+profiles/
+*/profiles/
+*.log
+__pycache__/
+downloads/
+wallet/
+.env
