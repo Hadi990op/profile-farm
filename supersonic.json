@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "name": "app",
+      "dir": ".",
+      "language": "python",
+      "install": "pip install --no-cache-dir -r requirements.txt && python -m camoufox fetch || true",
+      "start": "python run.py",
+      "release": "",
+      "path": "/",
+      "framework": "flask",
+      "secrets": []
+    }
+  ]
+}
