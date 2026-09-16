@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Profile Launcher</title>
+<title>Profile Farm</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:system-ui,-apple-system,sans-serif; background:#0f1117; color:#e6e6e6; padding:24px; }
@@ -13,36 +13,56 @@
   .btn:hover { background:#3d6bf5; }
   .btn.ghost { background:transparent; border:1px solid #444; color:#aaa; }
   .btn.ghost:hover { border-color:#666; }
+  .btn.danger { background:#e05555; }
+  .btn.small { padding:7px 12px; font-size:12px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
   .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+  .tabs { display:flex; gap:4px; background:#1a1d26; padding:4px; border-radius:10px; margin-bottom:18px; width:fit-content; }
+  .tabs button { background:transparent; border:0; color:#999; padding:8px 18px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .tabs button.active { background:#4f7cff; color:#fff; }
   .profiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px; }
   .card { background:#1a1d26; border:1px solid #2a2e3a; border-radius:12px; padding:16px; }
   .card h3 { font-size:16px; margin-bottom:4px; }
   .card .meta { color:#888; font-size:12px; margin-bottom:12px; }
-  .card .actions { display:flex; gap:8px; }
+  .card .actions { display:flex; gap:8px; flex-wrap:wrap; }
   .empty { text-align:center; padding:60px 20px; color:#666; }
+  .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; margin-right:6px; }
+  .badge.run { background:#1d3a26; color:#4fdc7c; }
+  .badge.stop { background:#333; color:#aaa; }
+  .notice { background:#2a2413; border:1px solid #5c4a1a; color:#e8c664; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; display:none; }
   .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:10; }
   .modal-bg.show { display:flex; align-items:center; justify-content:center; }
-  .modal { background:#1a1d26; padding:24px; border-radius:12px; width:380px; }
+  .modal { background:#1a1d26; padding:24px; border-radius:12px; width:400px; }
   .modal h2 { font-size:18px; margin-bottom:16px; }
   .modal label { display:block; font-size:12px; color:#999; margin:12px 0 4px; }
   .modal input, .modal select { width:100%; padding:10px; border-radius:6px; border:1px solid #333; background:#0f1117; color:#fff; font-size:14px; }
+  .modal .actions { margin-top:18px; display:flex; gap:8px; justify-content:flex-end; }
+  .site-list { margin-top:8px; }
+  .site-tag { display:inline-flex; align-items:center; gap:4px; background:#22263a; border-radius:6px; padding:4px 8px; font-size:12px; margin:2px; }
+  .site-tag button { background:none; border:0; color:#e05555; cursor:pointer; font-size:14px; }
 </style>
 </head>
 <body>
   <div class="toolbar">
     <div>
-      <h1>Profile Launcher</h1>
-      <div class="sub">Multi-identity browser profiles — each with a fixed country IP</div>
+      <h1>🧑‍🌾 Profile Farm</h1>
+      <div class="sub">Multi-identity browser &amp; mobile profiles</div>
     </div>
-    <button class="btn" onclick="showModal()">+ New Profile</button>
+    <button class="btn" id="newBtn" onclick="showModal()">+ New Profile</button>
   </div>
 
+  <div class="tabs">
+    <button id="tab-browser" class="active" onclick="switchTab('browser')">🌐 Browser Profiles</button>
+    <button id="tab-mobile" onclick="switchTab('mobile')">📱 Mobile (Android)</button>
+  </div>
+
+  <div id="notice" class="notice"></div>
   <div id="profiles" class="profiles"></div>
-  <div id="empty" class="empty" style="display:none">No profiles yet — click "New Profile" to create one.</div>
+  <div id="empty" class="empty" style="display:none"></div>
 
   <div id="modal-bg" class="modal-bg">
     <div class="modal">
-      <h2>New Profile</h2>
+      <h2 id="modal-title">New Profile</h2>
       <label>Name</label>
       <input id="f-name" placeholder="e.g. TikTok US #1">
       <label>Country</label>
@@ -52,10 +72,15 @@
         <option value="Germany">🇩🇪 Germany</option>
         <option value="France">🇫🇷 France</option>
         <option value="Pakistan">🇵🇰 Pakistan</option>
-  </select>
+        <option value="Canada">🇨🇦 Canada</option>
+        <option value="Australia">🇦🇺 Australia</option>
+        <option value="UAE">🇦🇪 UAE</option>
+      </select>
       <label>City (optional)</label>
       <input id="f-city" placeholder="e.g. New York">
-      <div style="margin-top:18px; display:flex; gap:8px; justify-content:flex-end;">
+      <label>Start sites (optional, one per line)</label>
+      <textarea id="f-sites" rows="3" style="width:100%; padding:10px; border-radius:6px; border:1px solid #333; background:#0f1117; color:#fff; font-size:13px;" placeholder="https://tiktok.com&#10;https://instagram.com"></textarea>
+      <div class="actions">
         <button class="btn ghost" onclick="hideModal()">Cancel</button>
         <button class="btn" onclick="createProfile()">Create</button>
       </div>
@@ -63,48 +88,149 @@
   </div>
 
 <script>
-let profiles = [];
+const FLAGS = {'United States':'🇺🇸','United Kingdom':'🇬🇧','Germany':'🇩🇪','France':'🇫🇷','Pakistan':'🇵🇰','Canada':'🇨🇦','Australia':'🇦🇺','UAE':'🇦🇪'};
+let tab = 'browser';
+let editing = null;
+
+function flag(c) { return FLAGS[c] || '🌐'; }
+
+function notice(msg) {
+  const el = document.getElementById('notice');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function switchTab(t) {
+  tab = t;
+  document.getElementById('tab-browser').classList.toggle('active', t === 'browser');
+  document.getElementById('tab-mobile').classList.toggle('active', t === 'mobile');
+  document.getElementById('newBtn').textContent = t === 'browser' ? '+ New Profile' : '+ New Mobile Profile';
+  refresh();
+}
 
 async function refresh() {
-  const res = await fetch('/api/profiles');
-  profiles = await res.json();
-  const el = document.getElementById('profiles');
+  if (tab === 'browser') return refreshBrowser();
+  return refreshMobile();
+}
+
+function renderBrowserProfiles(profiles) {
   const container = Object.values(profiles);
+  const el = document.getElementById('profiles');
   document.getElementById('empty').style.display = container.length ? 'none' : 'block';
+  document.getElementById('empty').textContent = 'No browser profiles yet — click "New Profile" to create one.';
   el.innerHTML = container.map(p => `
     <div class="card">
-      <h3>${p.name}</h3>
-      <div class="meta">${p.country || '—'} · ${p.running ? '🟢 running' : '⚪ stopped'}</div>
+      <h3>${esc(p.name)}</h3>
+      <div class="meta">
+        <span class="badge ${p.running ? 'run' : 'stop'}">${p.running ? '🟢 running' : '⚪ stopped'}</span>
+        ${flag(p.country)} ${esc(p.country || '—')}${p.city ? ' · ' + esc(p.city) : ''}
+      </div>
+      ${p.sites && p.sites.length ? `<div class="meta">Sites: ${p.sites.map(s=>`<span class="site-tag">${esc(shortUrl(s))}</span>`).join('')}</div>` : ''}
       <div class="actions">
-        <button class="btn" onclick="launch('${p.id}')">Launch</button>
-        <button class="btn ghost" onclick="delProfile('${p.id}')">Delete</button>
+        ${p.running
+          ? `<button class="btn small" onclick="stopProfile('${p.id}')">Stop</button>`
+          : `<button class="btn small" onclick="launchProfile('${p.id}')">Launch</button>`}
+        <button class="btn ghost small" onclick="location.reload();">Refresh</button>
+        <button class="btn danger small" onclick="delProfile('${p.id}', 'browser')">Delete</button>
       </div>
     </div>
   `).join('');
 }
 
-function showModal() { document.getElementById('modal-bg').classList.add('show'); }
+function renderMobileProfiles(data) {
+  const container = data.profiles || [];
+  const el = document.getElementById('profiles');
+  document.getElementById('empty').style.display = container.length ? 'none' : 'block';
+  document.getElementById('empty').textContent = 'No mobile profiles yet — click "New Mobile Profile" to create one.';
+  if (data.docker === false) {
+    notice('⚠ Docker/daemon not available on this host — mobile profiles can be created but not launched.');
+  } else notice('');
+  el.innerHTML = container.map(p => `
+    <div class="card">
+      <h3>${esc(p.name)}</h3>
+      <div class="meta">
+        <span class="badge ${p.status === 'running' ? 'run' : 'stop'}">${p.status === 'running' ? '🟢 running' : '⚪ ' + p.status}</span>
+        📱 ${esc(p.country || 'random')} · ADB :${p.adb_port}
+      </div>
+      <div class="actions">
+        ${p.status === 'running'
+          ? `<button class="btn small" onclick="mobileAction('${p.id}', 'stop')">Stop</button>`
+          : `<button class="btn small" onclick="mobileAction('${p.id}', 'launch')">Launch</button>`}
+        <button class="btn danger small" onclick="delProfile('${p.id}', 'mobile')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function refreshBrowser() {
+  const res = await fetch('/api/profiles');
+  renderBrowserProfiles(await res.json());
+}
+
+async function refreshMobile() {
+  try {
+    const res = await fetch('/api/mobile/profiles');
+    renderMobileProfiles(await res.json());
+  } catch (e) {
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('empty').textContent = 'Mobile launcher not reachable.';
+  }
+}
+
+function showModal() {
+  if (tab === 'browser') {
+    document.getElementById('modal-title').textContent = 'New Profile';
+  } else {
+    document.getElementById('modal-title').textContent = 'New Mobile Profile';
+  }
+  document.getElementById('modal-bg').classList.add('show');
+}
 function hideModal() { document.getElementById('modal-bg').classList.remove('show'); }
 
 async function createProfile() {
-  const body = {
-    name: document.getElementById('f-name').value,
-    country: document.getElementById('f-country').value,
-    city: document.getElementById('f-city').value,
-  };
-  await fetch('/api/profiles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const name = document.getElementById('f-name').value;
+  const country = document.getElementById('f-country').value;
+  const city = document.getElementById('f-city').value;
+  const sites = document.getElementById('f-sites').value
+    .split('\n').map(s => s.trim()).filter(Boolean);
+
+  if (tab === 'browser') {
+    await fetch('/api/profiles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, country, city, sites }) });
+  } else {
+    await fetch('/api/mobile/profiles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name, country }) });
+  }
   hideModal();
   refresh();
 }
-async function launch(id) {
-  await fetch(`/api/profiles/${id}/launch`, { method:'POST' });
+
+async function launchProfile(id) {
+  const res = await fetch(`/api/profiles/${id}/launch`, { method:'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && data.error) notice('⚠ ' + data.error);
   refresh();
 }
-async function delProfile(id) {
-  await fetch(`/api/profiles/${id}/delete`, { method:'POST' });
+async function stopProfile(id) {
+  await fetch(`/api/profiles/${id}/stop`, { method:'POST' });
   refresh();
 }
+async function delProfile(id, kind) {
+  if (!confirm('Delete this profile?')) return;
+  if (kind === 'browser') await fetch(`/api/profiles/${id}/delete`, { method:'POST' });
+  else await fetch(`/api/mobile/profiles/${id}/delete`, { method:'POST' });
+  refresh();
+}
+async function mobileAction(id, action) {
+  const res = await fetch(`/api/mobile/profiles/${id}/${action}`, { method:'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && data.detail) notice('⚠ ' + data.detail);
+  refresh();
+}
+
+function shortUrl(u) { try { return new URL(u).hostname; } catch { return u; } }
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
 refresh();
+setInterval(refresh, 10000);
 </script>
 </body>
 </html>
